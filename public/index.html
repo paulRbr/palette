@@ -1,0 +1,15 @@
+<h1>Welcome to Palette!</h1>
+
+<p>
+Try <code>POST</code>ing to the <code>/colors</code> path with a URL pointing to an image.
+
+<code>curl -X POST --data 'url=http://ia.media-imdb.com/images/M/MV5BNDkwNTEyMzkzNl5BMl5BanBnXkFtZTgwNTAwNzk3MjE@.jpg' http://palette-shothere.rhcloud.com/colors</code>
+</p>
+
+<p>
+<em>Or</em> directly enter the url to an image here:
+<form method="POST" action="/colors">
+  Image url: <input type="text" name="url"><br/>
+  <input type="submit" value="send">
+</form>
+</p>
