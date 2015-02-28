@@ -1,5 +1,5 @@
-require File.dirname(__FILE__)+'/app'
+require File.dirname(__FILE__)+'/api'
 
 map '/' do
-  run App
+  run Rack::Cascade.new [Palette::Api, Palette::Web]
 end
