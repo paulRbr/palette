@@ -16,6 +16,13 @@ class App < Sinatra::Base
   end
 
   post '/colors' do
-    ImageProcess.new(params[:url]).get_colors.to_json
+    if params[:url]
+      ImageProcess.new(params[:url], remote: true).get_colors.to_json
+    elsif params['file']
+      File.open('uploads/' + params['file'][:filename], "w") do |f|
+        f.write(params['file'][:tempfile].read)
+      end
+      ImageProcess.new("uploads/#{params['file'][:filename]}").get_colors.to_json
+    end
   end
 end

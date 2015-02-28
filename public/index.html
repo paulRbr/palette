@@ -1,15 +1,269 @@
-<h1>Welcome to Palette!</h1>
+<title>Palette &#8226; An image analyser API</title>
+<style>
+#holder { border: 10px dashed #ccc; width: 300px; min-height: 300px; margin: 20px auto;}
+#holder.hover { border: 10px dashed #0c0; }
+#holder img { display: block; margin: 10px auto; }
+#holder p { margin: 10px; font-size: 14px; }
+progress { width: 300px; }
+.fail { background: #c00; padding: 2px; color: #fff; }
+.hidden { display: none !important;}
+body { margin: 10px auto; width: 1000px;}
+article { width: 800px; background-color: #efefef; padding: 20px; }
+em.step { color: gray; font-size: 140%; }
+p.breath { margin: 40px 0; }
+article#result { clear: both; height: 100px; }
+div.color-div { float: left;  height: 100px; }
+div.table { display: table; }
+span.color-name { -webkit-filter: invert(100%); -moz-filter: invert(100%); filter: invert(100%); text-align: center; vertical-align: middle; display: table-cell; }
+/* Effect 10: Corner indicator */
+.la-anim-10 {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 300px;
+        height: 300px;
+        background: gray;
+        -webkit-transition: -webkit-transform 0.3s;
+        transition: transform 0.3s;
+        -webkit-transform: translateX(100%) translateY(-100%) rotate(45deg);
+        transform: translateX(100%) translateY(-100%) rotate(45deg);
+        pointer-events: none;
+}
 
-<p>
-Try <code>POST</code>ing to the <code>/colors</code> path with a URL pointing to an image.
+.la-anim-10.la-animate {
+        -webkit-transform: translateX(50%) translateY(-50%) rotate(45deg);
+        transform: translateX(50%) translateY(-50%) rotate(45deg);
+}
 
-<code>curl -X POST --data 'url=http://ia.media-imdb.com/images/M/MV5BNDkwNTEyMzkzNl5BMl5BanBnXkFtZTgwNTAwNzk3MjE@.jpg' http://palette-shothere.rhcloud.com/colors</code>
-</p>
+/* Loading circle idea from http://codepen.io/Metty/details/lgJck */
+.la-anim-10::before,
+.la-anim-10::after {
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        display: block;
+        border: 5px solid #fff;
+        border-radius: 50%;
+        content: '';
+}
 
-<p>
-<em>Or</em> directly enter the url to an image here:
-<form method="POST" action="/colors">
-  Image url: <input type="text" name="url"><br/>
-  <input type="submit" value="send">
-</form>
-</p>
+.la-anim-10::before {
+        margin-left: -40px;
+        width: 80px;
+        height: 80px;
+        border-right-color: silver;
+        border-left-color: silver;
+        -webkit-animation: rotation 3s linear infinite;
+        animation: rotation 3s linear infinite;
+}
+
+.la-anim-10::after {
+        bottom: 50px;
+        margin-left: -20px;
+        width: 40px;
+        height: 40px;
+        border-top-color: silver;
+        border-bottom-color: silver;
+        -webkit-animation: rotation 1s linear infinite;
+        animation: rotation 1s linear infinite;
+}
+
+
+@-webkit-keyframes rotation {
+        0%              { -webkit-transform: rotate(0deg); }
+        50%     { -webkit-transform: rotate(180deg); }
+        100%    { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes rotation {
+        0%              { transform: rotate(0deg); }
+        50%     { transform: rotate(180deg); }
+        100%    { transform: rotate(360deg); }
+}
+
+</style>
+
+
+<article>
+  <div id="loader" class="la-anim-10"></div>
+
+  <h1>Welcome to Palette!</h1>
+
+  <p class="breath">
+  <em class="step">Try</em> <code>POST</code>ing to the <code>/colors</code> path with a URL pointing to an image.
+  <br/>
+  <code>curl -X POST --data 'url=http://ia.media-imdb.com/images/M/MV5BNDkwNTEyMzkzNl5BMl5BanBnXkFtZTgwNTAwNzk3MjE@.jpg' http://palette-shothere.rhcloud.com/colors</code>
+  </p>
+
+  <p class="breath">
+  <em class="step">Or</em> directly enter the url of your image here:
+  <input id="url" type="text" name="url"><input id="submit" type="submit" value="send">
+  </p>
+
+  <p class="breath">
+  <em class="step">Or</em> Drag an image from your desktop on to the drop zone underneath.
+  </p>
+
+  <div id="holder">
+  </div>
+
+  <p id="upload" class="hidden"><label>Drag &amp; drop not supported, but you can still upload via this input field:<br><input type="file"></label></p>
+  <p id="filereader">File API &amp; FileReader API not supported</p>
+  <p id="formdata">XHR2's FormData is not supported</p>
+  <p id="progress">XHR2's upload progress isn't supported</p>
+  <p style="text-align: center;"><progress id="uploadprogress" min="0" max="100" value="0">0% complete</progress></p>
+</article>
+<article id="result">
+</article>
+<script>
+var holder = document.getElementById('holder'),
+    submitButton = document.getElementById('submit'),
+    url = document.getElementById('url'),
+    loader = document.getElementById('loader'),
+    result = document.getElementById('result'),
+    tests = {
+      filereader: typeof FileReader != 'undefined',
+      dnd: 'draggable' in document.createElement('span'),
+      formdata: !!window.FormData,
+      progress: "upload" in new XMLHttpRequest
+    },
+    support = {
+      filereader: document.getElementById('filereader'),
+      formdata: document.getElementById('formdata'),
+      progress: document.getElementById('progress')
+    },
+    acceptedTypes = {
+      'image/png': true,
+      'image/jpeg': true,
+      'image/gif': true
+    },
+    progress = document.getElementById('uploadprogress'),
+    fileupload = document.getElementById('upload');
+
+"filereader formdata progress".split(' ').forEach(function (api) {
+  if (tests[api] === false) {
+    support[api].className = 'fail';
+  } else {
+    // FFS. I could have done el.hidden = true, but IE doesn't support
+    // hidden, so I tried to create a polyfill that would extend the
+    // Element.prototype, but then IE10 doesn't even give me access
+    // to the Element object. Brilliant.
+    support[api].className = 'hidden';
+  }
+});
+
+function emptyElmt(elmt) {
+    while (elmt.firstChild) {
+      elmt.removeChild(elmt.firstChild);
+    }
+}
+
+function previewfile(file) {
+  if (tests.filereader === true && acceptedTypes[file.type] === true) {
+    var reader = new FileReader();
+    reader.onload = function (event) {
+      var image = new Image();
+      image.src = event.target.result;
+      image.width = 250; // a fake resize
+      emptyElmt(holder);
+      holder.appendChild(image);
+    };
+
+    reader.readAsDataURL(file);
+  }  else {
+    holder.innerHTML += '<p>Uploaded ' + file.name + ' ' + (file.size ? (file.size/1024|0) + 'K' : '');
+  }
+}
+
+function post(formData) {
+    // now post a new XHR request
+    if (tests.formdata) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/colors');
+      xhr.onload = function() {
+        progress.value = progress.innerHTML = 100;
+      };
+
+      if (tests.progress) {
+        xhr.upload.onprogress = function (event) {
+          if (event.lengthComputable) {
+            var complete = (event.loaded / event.total * 100 || 0);
+            progress.value = progress.innerHTML = complete;
+          }
+        }
+      }
+      xhr.onreadystatechange = function() {
+         loader.className = 'la-anim-10';
+         if(xhr.readyState == 4 && xhr.status == 200) {
+            handleResult(xhr.responseText);
+         }
+      }
+
+      xhr.send(formData);
+      emptyElmt(result);
+      loader.className = 'la-anim-10 la-animate';
+    }
+}
+
+function readfiles(files) {
+    var formData = tests.formdata ? new FormData() : null;
+    for (var i = 0; i < files.length; i++) {
+      if (tests.formdata) formData.append('file', files[i]);
+      previewfile(files[i]);
+    }
+
+    post(formData);
+}
+
+function handleResult(response) {
+    var colors = {};
+    try {
+      colors = JSON.parse(response);
+    } catch(e) {
+      console.log(e);
+    }
+    for (var key in colors) {
+      if (colors.hasOwnProperty(key) && colors[key].frequency > 0) {
+        var color = colors[key],
+            div = document.createElement('div'),
+            colorSpan = document.createElement('span');
+
+        colorSpan.innerHTML = key;
+        colorSpan.className = 'color-name';
+        colorSpan.style = "color: " + color.html + ";";
+        div.className = 'color-div';
+        if (key.length < color.frequency) {
+          div.appendChild(colorSpan);
+          div.className = 'color-div table';
+        }
+        div.style = "width: " + (color.frequency-1) + "%; background-color: " + color.html + ";";
+        result.appendChild(div);
+      }
+    }
+}
+
+function submitUrl() {
+    var formData = tests.formdata ? new FormData() : null;
+
+    if (tests.formdata) formData.append('url', url.value);
+
+    post(formData);
+}
+
+submitButton.onclick = submitUrl;
+
+if (tests.dnd) {
+  holder.ondragover = function () { this.className = 'hover'; return false; };
+  holder.ondragend = function () { this.className = ''; return false; };
+  holder.ondrop = function (e) {
+    this.className = '';
+    e.preventDefault();
+    readfiles(e.dataTransfer.files);
+  }
+} else {
+  fileupload.className = 'hidden';
+  fileupload.querySelector('input').onchange = function () {
+    readfiles(this.files);
+  };
+}
+</script>

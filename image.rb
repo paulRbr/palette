@@ -5,15 +5,20 @@ require 'tempfile'
 
 class ImageProcess
 
-  def initialize(url)
-    @uri = URI(url)
-    @name = @uri.path.split('/').last
-    @file = Net::HTTP.start(@uri.host, @uri.port) do |http|
-      resp = http.get(@uri.path)
-      file = Tempfile.new(@name, Dir.tmpdir, 'wb+')
-      file.write(resp.body)
-      file.flush
-      file
+  def initialize(url, opts = {})
+    if opts[:remote]
+      @uri = URI(url)
+      @name = @uri.path.split('/').last
+      @file = Net::HTTP.start(@uri.host, @uri.port) do |http|
+        resp = http.get(@uri.path)
+        file = Tempfile.new(@name, Dir.tmpdir, 'wb+')
+        file.write(resp.body)
+        file.flush
+        file
+      end
+    else
+      @name = url.split('/').last
+      @file = File.open(url, 'r')
     end
   end
 
